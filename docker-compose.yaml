@@ -1,0 +1,59 @@
+version: "3.8"
+
+services:
+  app:
+    platform: linux/x86_64 #linux/x86_64 даже на amd не собирается (для m1)
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: tail -f > /dev/null
+
+  postgresql:
+    image: postgres:12.2
+    container_name: svacer_postgres
+    restart: always
+    shm_size: 1g
+    environment:
+      - POSTGRES_DB=svace
+      - POSTGRES_USER=svace
+      - POSTGRES_PASSWORD=svace
+      - POSTGRES_ROOT_PASSWORD=svace
+    expose:
+      - "5432"
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+    networks:
+      svacer:
+    healthcheck:
+      test: pg_isready -U svace
+      interval: 8s
+      start_period: 16s
+      timeout: 4s
+      retries: 4
+
+  svacer:
+    image: ispras/svacer:latest
+    container_name: svacer
+    restart: always
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    ports:
+      - "3002:3002"
+      - "8080:8080"
+    volumes:
+      - ./svacer_data:/data
+    environment:
+      - SVACER_PG_URL=postgres://svace:svace@postgresql:5432/svace
+      - STORE=/data/store
+    networks:
+      svacer:
+    healthcheck:
+      test: curl --fail http://localhost:8080/api/health || exit 1
+      interval: 8s
+      start_period: 16s
+      timeout: 4s
+      retries: 4
+
+networks:
+  svacer:
